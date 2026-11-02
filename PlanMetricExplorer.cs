@@ -49,6 +49,41 @@ namespace VMS.TPS
             //add metrics to report.
             planMetrics.Add("Target", target.Id);
             planMetrics.Add("Target Volume", target.Volume.ToString("F1")+"cc");
+            //add the number of Fractions.
+            planMetrics.Add("Number of Fractions", plan.NumberOfFractions.ToString());
+            //add the total Dose.
+            planMetrics.Add("Total Dose", plan.TotalDose.ToString());
+            //when a DoseValue is converted to a string, it displays the unit.
+            //Max Dose
+            //convert dose to absolute value.
+            string maxDosePercent = plan.Dose.DoseMax3D.ToString();
+            plan.DoseValuePresentation = DoseValuePresentation.Absolute;
+            string maxDoseAbs = plan.Dose.DoseMax3D.ToString();
+            planMetrics.Add("Max Dose", String.Format("{0} ({1})", maxDoseAbs, maxDosePercent));
+            //MU Ratio (LINQ Expressions WHERE + SUM)
+            double muSum = plan.Beams.Where(b=>!b.IsSetupField).Sum(b => b.Meterset.Value);
+            double muRatio = muSum / plan.DosePerFraction.Dose;//cGy
+            planMetrics.Add("MU Ratio", muRatio.ToString("F2"));
+            //Conformity Index. 
+            //Find the body (to the V100 of the body) (hint: Look above at how we found the target);
+            //Get V100 of the body using GetVolumeAtDose
+            //Use the DICOM Type of EXTERNAL to find the body.
+            Structure body = plan.StructureSet.Structures.FirstOrDefault(st => st.DicomType == "EXTERNAL");
+            double v100Body = plan.GetVolumeAtDose(body, plan.TotalDose, VolumePresentation.AbsoluteCm3);
+            //double v100Body = plan.GetVolumeAtDose(body, new DoseValue(100, DoseValue.DoseUnit.Percent), VolumePresentation.AbsoluteCm3);
+            double ci = v100Body / target.Volume;
+            planMetrics.Add("Conformity Index", ci.ToString("F2"));
+            //Gradient Index V50/V100.
+            double v50Body = plan.GetVolumeAtDose(body, plan.TotalDose*0.5, VolumePresentation.AbsoluteCm3);
+            double gi = v50Body / v100Body;
+            planMetrics.Add("Gradient Index", gi.ToString("F2"));
+            //Homogeneity Index (D5-D95)/Dprescription. Doses on the target (use GetDoseAtVolume).
+            double d5 = plan.GetDoseAtVolume(target, 5, VolumePresentation.Relative, DoseValuePresentation.Absolute).Dose;
+            //can get numeric representaion of dose by calling .Dose at the end.
+            double d95 = plan.GetDoseAtVolume(target, 95, VolumePresentation.Relative, DoseValuePresentation.Absolute).Dose;
+            double hi = (d5 - d95) / plan.TotalDose.Dose;
+            planMetrics.Add("Homogeneity Index", hi.ToString("F2"));
+
 
             window.Width = 450;
             window.Height = 600;
